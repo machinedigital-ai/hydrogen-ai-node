@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1110">
+<title>Hydrogen AI Node</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1110;--panel:#121c1a;--line:#273833;--text:#edf7f2;--muted:#9fb5ac;--accent:#75e6ad;--danger:#ff8b8b}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,sans-serif}header{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}h1{font-size:20px;margin:0}h2{margin-top:0}button,input,textarea{font:inherit}button{cursor:pointer;border:1px solid var(--line);border-radius:10px;background:#192723;color:var(--text);padding:10px 14px}button.primary{background:var(--accent);color:#082417;border:0;font-weight:700}button.danger{color:var(--danger)}button:disabled{opacity:.5;cursor:wait}input,textarea{width:100%;background:#0c1513;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:11px}textarea{min-height:110px;resize:vertical}nav{display:flex;gap:6px;overflow:auto;padding:10px 14px;border-bottom:1px solid var(--line)}nav button{white-space:nowrap;padding:8px 12px}nav button.active{border-color:var(--accent);color:var(--accent)}main{max-width:900px;margin:auto;padding:18px 14px 60px}.view{display:none}.view.active{display:block}.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin:12px 0}.muted{color:var(--muted);font-size:14px}.pill{font-size:13px;border-radius:20px;padding:5px 10px;background:#342d18;color:#ffd787}.pill.online{background:#123a29;color:var(--accent)}.stack{display:grid;gap:10px}.row{display:flex;gap:10px;align-items:center}.row>*:first-child{flex:1}.item-head{display:flex;justify-content:space-between;gap:12px;align-items:start}.item-head h3{margin:0}.body{white-space:pre-wrap;overflow-wrap:anywhere}.message.user{border-left:3px solid var(--accent)}.message.assistant{border-left:3px solid #75a9e6}.error{color:var(--danger);min-height:24px}.task-done{text-decoration:line-through;color:var(--muted)}pre{white-space:pre-wrap;overflow-wrap:anywhere}#chatInput{min-height:76px}@media(min-width:700px){header{padding:22px 30px}main{padding:24px}}
+</style>
+</head>
+<body>
+<header><div><h1>Hydrogen AI Node</h1><div class="muted">Offline · local-first · your device</div></div><span id="modelStatus" class="pill">checking model</span></header>
+<nav aria-label="Node sections">
+<button class="active" data-view="chat">Chat</button><button data-view="notes">Notes</button><button data-view="tasks">Tasks</button><button data-view="tools">Tools</button><button data-view="system">System</button>
+</nav>
+<main>
+<div id="error" class="error" role="alert"></div>
+<section id="chat" class="view active"><h2>Local chat</h2><p class="muted">Responses are generated on this device. No cloud AI service is used.</p><div id="messages"></div><form id="chatForm" class="stack"><label for="chatInput">Message</label><textarea id="chatInput" maxlength="12000" required></textarea><div class="row"><button type="button" id="clearChat" class="danger">Clear history</button><button class="primary" type="submit">Send</button></div></form></section>
+<section id="notes" class="view"><h2>Offline notes</h2><form id="noteForm" class="card stack"><input id="noteTitle" maxlength="200" placeholder="Title" aria-label="Note title" required><textarea id="noteBody" maxlength="50000" placeholder="Note contents" aria-label="Note contents" required></textarea><button class="primary">Save note</button></form><div id="notesList"></div></section>
+<section id="tasks" class="view"><h2>Tasks</h2><form id="taskForm" class="row"><input id="taskTitle" maxlength="500" placeholder="New task" aria-label="New task" required><button class="primary">Add</button></form><div id="tasksList"></div></section>
+<section id="tools" class="view"><h2>Local tools</h2><div class="card stack"><h3>Text summarizer</h3><input type="file" id="textFile" accept=".txt,.md,.csv,.json,text/plain"><textarea id="summaryInput" maxlength="60000" placeholder="Paste text or choose a plain-text file"></textarea><button id="summarize" class="primary">Summarize offline</button><div id="summaryOutput" class="body"></div></div><div class="card stack"><h3>Search notes and tasks</h3><form id="searchForm" class="row"><input id="searchQuery" maxlength="200" placeholder="Search local data" required><button>Search</button></form><div id="searchResults"></div></div></section>
+<section id="system" class="view"><h2>Node status</h2><p class="muted">Data is stored in the node database on this phone. The server listens on localhost unless you deliberately change it.</p><button id="refreshSystem">Refresh</button><pre id="systemInfo" class="card">Loading…</pre></section>
+</main>
+<script>
+"use strict";
+const $ = (selector) => document.querySelector(selector);
+function showError(error){ $("#error").textContent = error ? String(error.message || error) : ""; }
+async function api(path, options){
+  options = options || {};
+  options.headers = Object.assign({}, options.headers);
+  if(options.body){ options.headers["Content-Type"] = "application/json"; }
+  const response = await fetch(path, options);
+  const data = await response.json().catch(() => ({error:"Invalid server response"}));
+  if(!response.ok){ throw new Error(data.error || ("Request failed: " + response.status)); }
+  return data;
+}
+function element(tag, className, text){ const node=document.createElement(tag); if(className){node.className=className;} if(text !== undefined){node.textContent=text;} return node; }
+function switchView(id){ document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===id)); document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===id)); showError(""); if(id==="system"){refreshStatus();} }
+document.querySelectorAll("nav button").forEach(button=>button.addEventListener("click",()=>switchView(button.dataset.view)));
+function renderMessages(messages){ const list=$("#messages"); list.replaceChildren(); if(!messages.length){list.append(element("p","muted","No messages yet."));} messages.forEach(message=>{const card=element("article","card message "+message.role);card.append(element("div","muted",message.role==="user"?"You":"Hydrogen"));card.append(element("div","body",message.content));list.append(card);}); list.scrollIntoView({block:"end"}); }
+async function loadChat(){ const data=await api("/api/chat"); renderMessages(data.messages); }
+$("#chatForm").addEventListener("submit",async event=>{event.preventDefault();showError("");const input=$("#chatInput");const button=event.submitter;button.disabled=true;try{await api("/api/chat",{method:"POST",body:JSON.stringify({message:input.value})});input.value="";await loadChat();}catch(error){showError(error);}finally{button.disabled=false;input.focus();}});
+$("#clearChat").addEventListener("click",async()=>{if(!confirm("Delete local chat history?")){return;}try{await api("/api/chat",{method:"DELETE"});await loadChat();}catch(error){showError(error);}});
+function renderNotes(notes){const list=$("#notesList");list.replaceChildren();if(!notes.length){list.append(element("p","muted","No notes yet."));}notes.forEach(note=>{const card=element("article","card");const head=element("div","item-head");head.append(element("h3","",note.title));const del=element("button","danger","Delete");del.addEventListener("click",async()=>{if(confirm("Delete this note?")){await api("/api/notes/"+note.id,{method:"DELETE"});loadNotes();}});head.append(del);card.append(head);card.append(element("div","muted",note.updated_at));card.append(element("div","body",note.body));list.append(card);});}
+async function loadNotes(){const data=await api("/api/notes");renderNotes(data.notes);}
+$("#noteForm").addEventListener("submit",async event=>{event.preventDefault();showError("");try{await api("/api/notes",{method:"POST",body:JSON.stringify({title:$("#noteTitle").value,body:$("#noteBody").value})});event.target.reset();await loadNotes();}catch(error){showError(error);}});
+function renderTasks(tasks){const list=$("#tasksList");list.replaceChildren();if(!tasks.length){list.append(element("p","muted","No tasks yet."));}tasks.forEach(task=>{const card=element("article","card row");const check=document.createElement("input");check.type="checkbox";check.checked=Boolean(task.done);check.setAttribute("aria-label","Complete "+task.title);check.style.width="auto";check.addEventListener("change",async()=>{await api("/api/tasks/"+task.id,{method:"PATCH",body:JSON.stringify({done:check.checked})});loadTasks();});card.append(check);const title=element("span",task.done?"task-done":"",task.title);card.append(title);const del=element("button","danger","Delete");del.addEventListener("click",async()=>{await api("/api/tasks/"+task.id,{method:"DELETE"});loadTasks();});card.append(del);list.append(card);});}
+async function loadTasks(){const data=await api("/api/tasks");renderTasks(data.tasks);}
+$("#taskForm").addEventListener("submit",async event=>{event.preventDefault();showError("");try{await api("/api/tasks",{method:"POST",body:JSON.stringify({title:$("#taskTitle").value})});event.target.reset();await loadTasks();}catch(error){showError(error);}});
+$("#textFile").addEventListener("change",event=>{const file=event.target.files[0];if(!file){return;}if(file.size>200000){showError("Choose a text file smaller than 200 KB.");return;}const reader=new FileReader();reader.onload=()=>{$("#summaryInput").value=reader.result;};reader.onerror=()=>showError("Could not read the file");reader.readAsText(file);});
+$("#summarize").addEventListener("click",async()=>{showError("");const button=$("#summarize");button.disabled=true;$("#summaryOutput").textContent="Generating locally…";try{const data=await api("/api/summarize",{method:"POST",body:JSON.stringify({text:$("#summaryInput").value})});$("#summaryOutput").textContent=data.summary;}catch(error){$("#summaryOutput").textContent="";showError(error);}finally{button.disabled=false;}});
+$("#searchForm").addEventListener("submit",async event=>{event.preventDefault();showError("");try{const data=await api("/api/search?q="+encodeURIComponent($("#searchQuery").value));const results=$("#searchResults");results.replaceChildren();data.notes.forEach(note=>results.append(element("div","card body","Note: "+note.title+"\n"+note.body)));data.tasks.forEach(task=>results.append(element("div","card","Task: "+task.title)));if(!data.notes.length&&!data.tasks.length){results.append(element("p","muted","No matches."));}}catch(error){showError(error);}});
+async function refreshStatus(){try{const data=await api("/api/status");const pill=$("#modelStatus");pill.textContent="model "+data.model;pill.classList.toggle("online",data.model==="online");$("#systemInfo").textContent=JSON.stringify(data,null,2);}catch(error){$("#modelStatus").textContent="node error";showError(error);}}
+$("#refreshSystem").addEventListener("click",refreshStatus);
+Promise.allSettled([loadChat(),loadNotes(),loadTasks(),refreshStatus()]).then(results=>{const failed=results.find(r=>r.status==="rejected");if(failed){showError(failed.reason);}});setInterval(refreshStatus,15000);
+</script>
+</body>
+</html>
