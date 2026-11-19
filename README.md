@@ -122,3 +122,22 @@ python -m unittest discover -s tests -v
 ~~~
 
 The automated tests validate storage and input handling; actual inference must be tested on the phone with the model server running.
+
+## Phone verification
+
+Use the [RED Hydrogen One verification procedure](docs/PHONE_VERIFICATION.md) for
+installation checks, an isolated installed-stack smoke test, offline/browser
+evidence, resource observations, and troubleshooting. It distinguishes repository
+checks from results that require the physical phone.
+
+~~~sh
+python3 scripts/smoke_test.py preflight
+# After installation, with airplane mode enabled and Wi-Fi/mobile data disabled:
+python3 scripts/smoke_test.py run --offline-confirmed
+~~~
+
+The test refuses occupied ports, binds both services to localhost, creates a fresh
+test database, and stops only processes it starts. It preserves evidence without
+touching existing notes or chat. A passing automated run still requires the manual
+checks in the procedure; physical RED Hydrogen One inference remains unverified
+until that evidence is reviewed.
