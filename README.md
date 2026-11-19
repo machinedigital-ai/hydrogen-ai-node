@@ -56,7 +56,7 @@ Do not use an old, unmaintained Termux package. Keep the stock Android firmware 
 bash scripts/install.sh
 ~~~
 
-The installer builds llama.cpp and downloads the default model. Compilation and the model download can take a while.
+The installer builds a pinned llama.cpp revision in **$HOME/.hydrogen-ai-node/llama.cpp** and downloads the default model to **$HOME/.hydrogen-ai-node/models/**. It does not use or modify an existing **$HOME/llama.cpp** checkout. Compilation and the 1.1 GB model download can take a while. Every downloaded or pre-existing model must pass SHA-256 verification before installation succeeds.
 
 ## Start and stop
 
@@ -95,7 +95,7 @@ curl http://127.0.0.1:8090/api/status
 
 The default database is at **$HOME/.hydrogen-ai-node/node.db**. Model output and node logs remain in the Termux home directory. Both services bind to **127.0.0.1**, so other devices cannot connect by default.
 
-Do not expose port 8090 directly to the public internet. This first version has no authentication or TLS. LAN access, authentication, and backups should be designed before changing the bind address. There is intentionally no arbitrary shell-command endpoint.
+Do not expose port 8090 directly to the public internet. The dashboard has no authentication and neither service uses TLS. The start script generates a private random API key for the model server and stores it with owner-only permissions. LAN access, authentication, and backups should be designed before changing the bind address. When the node is bound to loopback, it rejects non-local Host headers as a DNS-rebinding safeguard. The model client accepts only plain HTTP on loopback. There is intentionally no arbitrary shell-command endpoint.
 
 ## Raspberry Pi–style roadmap
 
@@ -112,7 +112,11 @@ USB serial accessories are the recommended GPIO path. The Hydrogen One does not 
 
 ## Model expectations
 
-A 1.5B model is useful for basic chat, rewriting, and short summaries, but it is not as capable as a modern cloud model. Larger models require more memory and will be slow on the Snapdragon 835. Keep context small, expect heat, and verify important answers.
+A 1.5B model is useful for basic chat, rewriting, and short summaries, but it is not as capable as a modern cloud model. Larger models require more memory and will be slow on the Snapdragon 835. Expect heat and verify important answers.
+
+The server starts with a 2,048-token context. Chat messages are limited to 3,000 characters and retained history is bounded to a 4,000-character prompt budget. Summaries accept up to 18,000 characters and process longer documents in roughly 3,000-character chunks before combining the partial summaries. A long summary requires several sequential model calls and can take minutes. These limits reduce memory pressure; they do not guarantee that Android will never terminate a busy process.
+
+See [Evidence and safe investigation workflows](docs/EVIDENCE.md) for phone-inference sources, realistic OSINT-adjacent uses, and verification rules. See [Verification](docs/VERIFICATION.md) for the exact tested revisions, hashes, checks, and remaining device-specific unknowns.
 
 ## Development checks
 
@@ -121,4 +125,4 @@ python -m py_compile hydrogen_node.py
 python -m unittest discover -s tests -v
 ~~~
 
-The automated tests validate storage and input handling; actual inference must be tested on the phone with the model server running.
+Additional audit checks used in development are Ruff, Bandit, shell syntax validation, dashboard JavaScript parsing, and a real llama-server inference smoke test. Cloud tests do not replace an on-device test with the model server running. Model output is not evidence; verify important claims against original sources.

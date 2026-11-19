@@ -28,6 +28,7 @@ class HttpTests(unittest.TestCase):
         self.server.db = Database(Path(self.temp.name) / "node.db")
         self.server.llama = FakeLlama()
         self.server.static_dir = str(Path(__file__).resolve().parent.parent / "static")
+        self.server.local_only = True
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.port = self.server.server_address[1]
@@ -38,10 +39,12 @@ class HttpTests(unittest.TestCase):
         self.server.server_close()
         self.temp.cleanup()
 
-    def request(self, method, path, payload=None, content_type="application/json"):
+    def request(self, method, path, payload=None, content_type="application/json", extra_headers=None):
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         body = json.dumps(payload) if payload is not None else None
-        headers = {"Content-Type": content_type} if body is not None else {}
+        headers = dict(extra_headers or {})
+        if body is not None:
+            headers["Content-Type"] = content_type
         connection.request(method, path, body=body, headers=headers)
         response = connection.getresponse()
         raw = response.read()
@@ -86,6 +89,24 @@ class HttpTests(unittest.TestCase):
         self.assertIn("Content-Type", data["error"])
         status, data = self.request("GET", "/not-found")
         self.assertEqual(status, 404)
+        status, data = self.request("GET", "/api/status", extra_headers={"Host": "attacker.example"})
+        self.assertEqual(status, 403)
+        status, data = self.request("POST", "/api/chat/clear")
+        self.assertEqual(status, 404)
+        status, data = self.request("POST", "/api/chat", {"message": "x" * 3001})
+        self.assertEqual(status, 400)
+        status, data = self.request("POST", "/api/summarize", {"text": "x" * 18001})
+        self.assertEqual(status, 400)
+
+    def test_failed_inference_does_not_save_partial_chat(self):
+        class FailingLlama(FakeLlama):
+            def chat(self, messages, max_tokens=384):
+                raise RuntimeError("synthetic model failure")
+        self.server.llama = FailingLlama()
+        status, data = self.request("POST", "/api/chat", {"message": "do not strand this"})
+        self.assertEqual(status, 503)
+        status, history = self.request("GET", "/api/chat")
+        self.assertEqual(history["messages"], [])
 
 
 if __name__ == "__main__":

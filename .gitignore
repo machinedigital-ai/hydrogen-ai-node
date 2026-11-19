@@ -5,3 +5,4 @@ __pycache__/
 *.download
 *.log
 .hydrogen-ai-node/
+.ruff_cache/
